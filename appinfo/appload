@@ -1,0 +1,31 @@
+#!/bin/bash
+
+App="appinfo"
+DATE=`date +%Y%m%d%H`
+Yestoady=`date -d "1 day ago" +%Y%m%d`
+HbaseJar=`hbase classpath | tr ':' '\n' | grep "jar$" | awk '{print $0}' | tr '\n' ':'`
+HadoopJar=`hadoop classpath | tr ':' '\n' | grep "jar$" | awk '{print $0}' | tr '\n' ':'`
+HADOOP_CLASSPATH=$HADOOP_CLASSPATH:$HbaseJar
+export HADOOP_CLASSPATH
+
+Hadoop="/usr/bin/hadoop"
+HBaseHome="/opt/cloudera/parcels/CDH/lib/hbase"
+ToolJar="hbase-server-0.98.6-cdh5.2.0.jar"
+#LocalFile=/home/dev/app.csv
+LocalFile="./app.csv"
+HdfsDir="/dmp/mr/tmp"
+HdfsFile="/dmp/mr/tmp/app.csv"
+ToolName="importtsv"
+#Cols="-Dimporttsv.separator=, -Dimporttsv.columns=i:updated,i:otherApps,i:star,i:similarApps,i:gPlusRecommends,i:price,i:osRequired,i:fileSize,HBASE_ROW_KEY,i:desc,i:inAppMsg,i:starInFive,i:category,i:name,i:contentRating,i:version,i:subCategory,i:developer,i:downloads"
+
+Cols="-Dimporttsv.separator=| -Dimporttsv.columns=HBASE_ROW_KEY,i:name,i:developer,i:category,i:subCategory,i:price,i:currency,i:inAppMsg,i:star,i:starInFive,i:gPlusRecommends,i:desc,i:updated,i:fileSize,i:downloads,i:minDownloads,i:maxDownloads,i:version,i:osRequired,i:contentRating,i:similarApps,i:otherApps"
+Table="dmp_appinfo"
+
+# upload file to hdfs
+echo "$Hadoop fs -put $LocalFile $HdfsFile"
+$Hadoop fs -mkdir -p $HdfsDir
+$Hadoop fs -put -f $LocalFile $HdfsFile
+
+# load into hbase
+echo "$Hadoop jar $HBaseHome/$ToolJar $ToolName $Cols $Table $HdfsFile"
+$Hadoop jar $HBaseHome/$ToolJar $ToolName $Cols $Table $HdfsFile

@@ -1,0 +1,127 @@
+__author__ = 'ulyx'
+
+import string
+import scrapy
+from scrapy.http import Request
+from scrapy.spider import BaseSpider
+from scrapy.selector import HtmlXPathSelector
+from appinfo.items import AppinfoItem
+
+class AppinfoSpider(BaseSpider):
+    name = "appinfo"
+    allowed_domains = ["play.google.com", "apis.google.com"]
+    base_url = 'https://play.google.com/store/apps/details?id='
+    start_urls = [
+        "https://play.google.com/store/apps/details?id=com.jyaif.pewpew"
+    ]
+
+    baseInfo = dict({
+        'name':'//div[@class="document-title"]/div/text()',
+        'developer':'//div[@itemprop="author"]/a/span[@itemprop="name"]/text()',
+        'updated':'//div[@itemprop="author"]/div[@class="document-subtitle"]/text()',
+        'category':'//a[@class="document-subtitle category"]/@href',
+        'subCategory':'//a[@class="document-subtitle category"]/span[@itemprop="genre"]/text()',
+        'price':'//span[@itemprop="offers"]/meta[@itemprop="price"]/@content',
+        'inAppMsg':'//div[@class="inapp-msg"]/text()',
+        'star':'//meta[@itemprop="ratingCount"]/@content',
+        'starInFive':'//meta[@itemprop="ratingValue"]/@content',
+        #'gPlusRecommends':'//div[@id="___plusone_1"]/iframe/@src',
+        ## may be very long
+        'desc':'//div[@class="id-app-orig-desc"]/text()',
+        #'appMeta':'//div[@class="meta-info"]',
+        'updated':'//div[@class="meta-info"]/div[@itemprop="datePublished"]/text()',
+        'fileSize':'//div[@class="meta-info"]/div[@itemprop="fileSize"]/text()',
+        'downloads':'//div[@class="meta-info"]/div[@itemprop="numDownloads"]/text()',
+        'version':'//div[@class="meta-info"]/div[@itemprop="softwareVersion"]/text()',
+        'osRequired':'//div[@class="meta-info"]/div[@itemprop="operatingSystems"]/text()',
+        'contentRating':'//div[@class="meta-info"]/div[@itemprop="contentRating"]/text()',
+        #'appRecommends':'//div[@class="details-section recommendation"]/div/div'
+    })
+
+    appRecommends = {
+        'xpath': {
+            'top': '//div[@class="details-section recommendation"]/div/div',
+            'heading': '//h1[@class="heading"]/text()',
+            'apps': '//div[@class="card no-rationale square-cover apps small"]/@data-docid'
+        },
+        'tag': {
+            'similar': 'similarApps',
+            'more': 'otherApps',
+        }
+    }
+
+    gPlusRecommend = {
+        'xpath': {
+            'url' : '//div[@id="___plusone_1"]/iframe/@src',
+            'value' : '//span[@class="A8 eja"]'
+        },
+        'tag': 'gPlusRecommends'
+    }
+
+    def __init__(self, filename=None):
+        if filename:
+            with open(filename, 'r') as f:
+                self.start_urls = [self.base_url + appid.strip() for appid in f.readlines()]
+
+    def parse(self, response):
+
+        item = AppinfoItem()
+        item['appId'] = response.url.split("=")[-1]
+        hxs = HtmlXPathSelector(response)
+        # parse base information
+        self.parse_base_item(self.baseInfo, hxs, item)
+        # parse recommended apps
+        self.parse_app_recommends(self.appRecommends, hxs, item)
+        # parse gplus recommend
+        #self.parse_gplus_link(self.gPlusRecommend, hxs, item)
+        gplus = self.gPlusRecommend
+        url = hxs.select(gplus['xpath']['url']).extract()
+        if len(url) != 0:
+            url = url[0]
+            yield Request(url, callback=self.parse_gplus_recommend, meta={'item':item, 'gplus':gplus})
+        else:
+            yield item
+
+    def parse_base_item(self, baseInfo, hxs, item):
+        for tag, xpath in baseInfo.iteritems():
+            selector = hxs.select(xpath)
+            values = selector.extract()
+            if len(values) != 0:
+                item[tag] = string.strip(values.pop())
+            else:
+                item[tag] = ""
+            print tag, '=', item[tag]
+
+    def parse_app_recommends(self, recommends, hxs, item):
+        selectors = hxs.select(recommends['xpath']['top'])
+        print selectors.extract()
+        for cluster in selectors:
+            selector = HtmlXPathSelector(text=cluster.extract())
+            headings = selector.select(recommends['xpath']['heading']).extract()
+            field = recommends['tag']['more']
+            if len(headings) != 0:
+                heading = string.lower(string.strip(headings.pop()))
+                if heading == 'similar':
+                    field = recommends['tag']['similar']
+            item[field] = selector.select(recommends['xpath']['apps']).extract()
+            print field, '=', item[field]
+
+    def parse_gplus_link(self, gplus, hxs, item):
+        url = hxs.select(gplus['xpath']['url']).extract()
+        yield Request(url, callback=self.parse_gplus_recommend, meta={'item':item, 'gplus':gplus})
+
+
+    def parse_gplus_recommend(self, response):
+        item = response.meta['item']
+        gplus = response.meta['gplus']
+        hxs = HtmlXPathSelector(response)
+        values = hxs.select(gplus['xpath']['value']).extract()
+        if len(values) != 0:
+            value = string.strip(values.pop())
+            value = string.split(value, " ")[0]
+            value = string.lstrip(value, '+')
+            item[gplus['tag']] = value
+        return item
+
+
+

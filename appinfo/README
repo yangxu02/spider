@@ -1,0 +1,35 @@
+Prerequisite:
+1. python >= 2.7
+2. lxml
+3. scrapy http://charlesmartinreid.com/wiki/Scrapy
+
+
+Install:
+--ubuntu--
+* sudo apt-get install libxml2-dev libxslt-dev python-dev python-pip
+* pip install lxml
+* sudo apt-get install python-scrapy
+
+--centos--
+* sudo yum install libxml2-devel libxslt-devel python-devel python-pip
+* pip install lxml
+* sudo yum install python-scrapy
+
+Run:
+* create a tutorial project
+	scrapy startproject tutorial
+* test with tutorial
+	scrapy crawl dmoz
+
+Run with appinfo:
+enter the root directory of appinfo and run with:
+* test:
+scrapy crawl appinfo
+* run:
+scrapy crawl appinfo -t csv -o app.csv -a filename=appid.list
+
+appid.list: file contains a list of appid to scrapy from google play
+app.csv: result file with csv format
+
+
+
